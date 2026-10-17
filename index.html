@@ -1,112 +1,115 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>SoftUni Blog</title>
-    <link type="text/css" rel="stylesheet"  href="styles/style.css">
-    <script src = "scripts/jquery-1.10.2.js"></script>
-    <script src = "scripts/bootstrap.js"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Teodor Donchev · Apps</title>
+<meta name="description" content="Teodor Donchev builds mobile and web apps. Latest: Overhang, a one-tap stacking game.">
+<link rel="icon" href="assets/overhang-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,700;6..12,800&display=swap">
+<style>
+/* Layout: one narrow column, intro then a product card per app. Accent comes from Overhang's icon. */
+:root {
+  --bg: #f7f3f6;
+  --surface: #ffffff;
+  --ink: #1d2433;
+  --soft: #5b6273;
+  --line: #e6dfe5;
+  --accent: #c94f8f;
+  --gold: #f2b630;
+  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --body: "Nunito Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #15131c; --surface: #1f1c29; --ink: #f2f0f7; --soft: #a9a6b8; --line: #2e2a3b; --accent: #ec7ab4; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 var(--body); }
+a { color: inherit; }
+a:focus-visible, .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+.wrap { max-width: 880px; margin: 0 auto; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+
+header { padding-block: calc(env(safe-area-inset-top, 0px) + 28px) 0; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
+.mark { font: 700 15px var(--display); letter-spacing: .02em; text-decoration: none; }
+.mail { font-weight: 700; color: var(--soft); text-decoration: none; }
+.mail:hover { color: var(--ink); }
+
+.intro { padding-block: 72px 56px; }
+.intro h1 { font: 700 clamp(34px, 7vw, 60px)/1.05 var(--display); letter-spacing: -.02em; margin: 0 0 18px; text-wrap: balance; }
+.intro h1 em { font-style: normal; color: var(--accent); }
+.intro p { font-size: 19px; color: var(--soft); max-width: 56ch; margin: 0; }
+
+.label { font: 800 12px var(--body); letter-spacing: .14em; text-transform: uppercase; color: var(--soft); margin: 0 0 14px; }
+.app { background: var(--surface); border: 1px solid var(--line); border-radius: 28px; padding: clamp(20px, 4vw, 36px); display: grid; gap: 28px; }
+.app-head { display: flex; gap: 18px; align-items: center; }
+.app-head img { width: 88px; height: 88px; border-radius: 22px; flex: none; box-shadow: 0 6px 18px rgba(201, 79, 143, .22); }
+.app-head h2 { font: 700 28px/1.1 var(--display); margin: 0 0 6px; }
+.app-head p { margin: 0; color: var(--soft); }
+.pitch { margin: 0; max-width: 62ch; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { display: inline-flex; align-items: center; min-height: 48px; padding: 0 20px; border-radius: 14px; font-weight: 800; text-decoration: none; }
+.btn.primary { background: var(--ink); color: var(--bg); }
+.btn.quiet { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.soon { font-weight: 700; color: var(--soft); font-size: 15px; }
+.shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.shots img { width: 100%; height: auto; border-radius: 16px; display: block; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px 24px; margin: 0; }
+.facts dt { font: 800 12px var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--soft); }
+.facts dd { margin: 2px 0 0; }
+
+footer { padding-block: 64px calc(env(safe-area-inset-bottom, 0px) + 40px); color: var(--soft); font-size: 15px; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+@media (max-width: 560px) { .shots { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .shots img { border-radius: 10px; } .app-head img { width: 72px; height: 72px; border-radius: 18px; } }
+</style>
 </head>
 <body>
+<div class="wrap">
   <header>
-<div class = "navbar navbar-default navbar-fixed-top text-uppercase">
-    <div class="container">
-        <div class="navbar-header">
-            <a href="index.html" class="navbar-brand">SoftUni Blog</a>
-            <button type="button" class="navbar-toggle"
-                    data-toggle="collapse" data-target = ".navbar-collapse">
-                <span class = "icon-bar"></span>
-                <span class = "icon-bar"></span>
-                <span class = "icon-bar"></span>
-            </button>
-        </div>
-         <div class="navbar-collapse collapse">
-            <ul class="nav navbar-nav navbar-right">
-                <li><a href="register.html">Register</a></li>
-                <li><a href="login.html">Login</a></li>
-            </ul>
-
-        </div>
-    </div>
-
-</div>
+    <a class="mark" href="./">Teodor Donchev</a>
+    <a class="mail" href="mailto:teodorgdo@gmail.com">teodorgdo@gmail.com</a>
   </header>
 
-  <main>
-       <div class="container body-content">
-           <div class="row">
-               <div class="col-md-6">
-                   <article>
-                       <header>
-                             <h2>Why Choosing the Right Infrastructure.</h2>
-                       </header>
+  <section class="intro">
+    <h1>I build <em>mobile</em> and <em>web</em> apps.</h1>
+    <p>Small, polished apps for iPhone, Android and the browser, built and shipped end to end: design, code, store release.</p>
+  </section>
 
-                       <p>
-                           Lorem ipsum dolor sit amet, consectetur adipisicing elit. Delectus dicta id magni
-                           maiores nobis veritatis vero. Ad, cumque dignissimos fugiat ipsa modi possimus quasi
-                           ratione reiciendis sunt tenetur voluptates voluptatum!Ducimus facilis fugiat,
-                           id iure provident quam vel voluptates. Dolorum ipsam magni necessitatibus officia, quis sint
-                           voluptatem! Cupiditate eos iure magni quos vitae. Adipisci debitis eos et molestias reprehenderit
-                           velit.Deserunt ducimus eum, id illo in ipsa maiores molestias mollitia nobis
-                           placeat recusandae soluta, ullam voluptatum. Ad laboriosam molestiae mollitia temporibus.
-                           Dicta impedit in nam nisi porro quisquam, recusandae velit.
-                       </p>
+  <section aria-labelledby="apps">
+    <h2 class="label" id="apps">Apps</h2>
+    <article class="app">
+      <div class="app-head">
+        <img src="assets/overhang-icon.png" alt="Overhang app icon" width="88" height="88">
+        <div>
+          <h2>Overhang</h2>
+          <p>A one-tap stacking game</p>
+        </div>
+      </div>
+      <p class="pitch">A block slides across the top of your tower. Tap to drop it: whatever hangs over the edge is cut off, and a perfect drop keeps the block whole. Chain perfects, take on the daily tower, and unlock new themes.</p>
+      <div class="actions">
+        <a class="btn primary" href="overhang/">Play in your browser</a>
+        <a class="btn quiet" href="overhang/privacy.html">Privacy policy</a>
+        <span class="soon">iPhone app coming to the App Store</span>
+      </div>
+      <div class="shots">
+        <img src="assets/overhang-climb.jpg" alt="Overhang gameplay: a tall neon tower with a perfect-drop streak" width="540" height="1174" loading="lazy">
+        <img src="assets/overhang-best.jpg" alt="Overhang game-over card showing a new best score" width="540" height="1174" loading="lazy">
+        <img src="assets/overhang-daily.jpg" alt="Overhang daily challenge screen with a 6-day streak" width="540" height="1174" loading="lazy">
+      </div>
+      <dl class="facts">
+        <div><dt>Platforms</dt><dd>iPhone, web; Android planned</dd></div>
+        <div><dt>Price</dt><dd>Free, with ads and an optional Remove Ads purchase</dd></div>
+        <div><dt>Support</dt><dd><a href="mailto:teodorgdo@gmail.com?subject=Overhang">teodorgdo@gmail.com</a></dd></div>
+      </dl>
+    </article>
+  </section>
 
-                       <small class="author">
-                        <p>Teodor Donchev.</p>
-                       </small>
-
-                       <footer>
-
-                           <div class="pull-right">
-                               <a href="viewpost.html"
-                                  class="btn btn-default btn-xs">
-                                   Read More &raquo;
-                               </a></div>
-                       </footer>
-                   </article>
-               </div>
-               <div class="col-md-6">
-                   <article>
-                       <header>
-                           <h2>Why Choosing the Right Infrastructure.</h2>
-                       </header>
-
-                       <p>
-                           Lorem ipsum dolor sit amet, consectetur adipisicing elit. Delectus dicta id magni
-                           maiores nobis veritatis vero. Ad, cumque dignissimos fugiat ipsa modi possimus quasi
-                           ratione reiciendis sunt tenetur voluptates voluptatum!Ducimus facilis fugiat,
-                           id iure provident quam vel voluptates. Dolorum ipsam magni necessitatibus officia, quis sint
-                           voluptatem! Cupiditate eos iure magni quos vitae. Adipisci debitis eos et molestias reprehenderit
-                           velit.Deserunt ducimus eum, id illo in ipsa maiores molestias mollitia nobis
-                           placeat recusandae soluta, ullam voluptatum. Ad laboriosam molestiae mollitia temporibus.
-                           Dicta impedit in nam nisi porro quisquam, recusandae velit.
-                       </p>
-
-                       <small class="author">
-                           <p>Teodor Donchev.</p>
-                       </small>
-
-                       <footer>
-
-                           <div class="pull-right">
-                               <a href="viewpost.html"
-                                  class="btn btn-default btn-xs">
-                                   Read More &raquo;
-                               </a></div>
-                       </footer>
-                   </article>
-               </div>
-           </div>
-       </div>
-  </main>
-
-<footer>
-    <div class="container modal-footer">
-        <p>&copy; 2016 - Software University Foundation</p>
-    </div>
-
-</footer>
-
+  <footer>
+    <span>Teodor Donchev</span>
+    <a href="mailto:teodorgdo@gmail.com">teodorgdo@gmail.com</a>
+    <a href="overhang/privacy.html">Overhang privacy policy</a>
+  </footer>
+</div>
 </body>
 </html>

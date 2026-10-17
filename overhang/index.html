@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<title>Overhang</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Nunito:wght@600;800&display=swap">
+<style>
+/* Layout: one full-bleed canvas, HUD floats on top, panels slide up from the bottom. Colors come from the active theme (set in JS on :root). */
+:root {
+  --ink: #1d2433;
+  --inv: #fff;
+  --chip: rgba(255, 255, 255, .55);
+  --sheet: #fff;
+  --coin: #f2b630;
+  --display: "Bungee", "Arial Black", Impact, sans-serif;
+  --body: "Nunito", system-ui, -apple-system, sans-serif;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body { background: #cfe3f0; color: var(--ink); font-family: var(--body); overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+.hud { position: fixed; left: 0; right: 0; top: 0; pointer-events: none; text-align: center;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 28px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+#score { font-family: var(--display); font-size: clamp(56px, 16vw, 96px); line-height: 1; font-variant-numeric: tabular-nums; }
+#best { font-weight: 800; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; opacity: .65; margin-top: 6px; }
+#flash { font-family: var(--display); font-size: 20px; letter-spacing: .06em; margin-top: 14px; min-height: 1.3em; opacity: 0; transition: opacity .25s; }
+#flash.on { opacity: 1; transition: none; }
+.msg { position: fixed; left: 0; right: 0; bottom: 0; pointer-events: none; text-align: center; display: grid; gap: 8px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 28px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+#title { font-family: var(--display); font-size: clamp(36px, 11vw, 64px); line-height: 1; }
+#hint { font-weight: 800; font-size: 16px; opacity: .65; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { #hint { animation: none; } }
+button { pointer-events: auto; border: 0; cursor: pointer; font-family: var(--body); font-weight: 800; color: var(--ink); }
+button:disabled { cursor: default; opacity: .5; }
+button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+.corner { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 14px); min-height: 44px; display: flex; align-items: center; gap: 6px; border-radius: 22px; background: var(--chip); }
+#gear { left: max(14px, env(safe-area-inset-left, 0px)); width: 44px; justify-content: center; }
+#coins { right: max(14px, env(safe-area-inset-right, 0px)); padding: 0 14px 0 10px; font: 800 15px var(--body); font-variant-numeric: tabular-nums; pointer-events: none; }
+.coin { width: 16px; height: 16px; border-radius: 50%; background: var(--coin); box-shadow: inset 0 -2px 0 rgba(0, 0, 0, .18); flex: none; }
+/* Buttons: one shape everywhere, rank shown by fill. Gold = paid-by-ad reward, ink = main action, soft = secondary. */
+.btn { min-height: 48px; padding: 0 12px; border-radius: 14px; background: var(--chip); font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.soft { background: color-mix(in srgb, var(--ink) 9%, transparent); }
+.btn.primary { background: var(--ink); color: var(--inv); }
+.btn.gold { background: var(--coin); color: #1d2433; }
+.btn.big { min-height: 58px; border-radius: 16px; font-size: 18px; }
+.btn.small { min-height: 44px; font-size: 14px; }
+.btn.gold:not(:disabled) { animation: nudge 1.6s ease-in-out infinite; }
+@keyframes nudge { 50% { transform: scale(1.03); } }
+.line { display: flex; gap: 8px; }
+.line > * { flex: 1; min-width: 0; }
+.menu-btns { display: grid; gap: 8px; width: 100%; max-width: 380px; justify-self: center; margin-top: 10px; }
+#tip { position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 40px); text-align: center; font-weight: 800; font-size: 16px; pointer-events: none;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); animation: pulse 1.6s ease-in-out infinite; }
+#over { position: fixed; inset: 0; z-index: 3; display: grid; place-items: center; background: rgba(10, 12, 20, .22);
+  padding-block: calc(env(safe-area-inset-top, 0px) + 150px) calc(env(safe-area-inset-bottom, 0px) + 16px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.card { width: 100%; max-width: 360px; display: grid; gap: 10px; text-align: center; background: var(--sheet); border-radius: 24px; padding: 22px 16px 16px;
+  box-shadow: 0 20px 60px rgba(10, 12, 20, .28); animation: pop .22s ease-out; }
+@keyframes pop { from { transform: translateY(12px) scale(.96); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .btn.gold:not(:disabled), .card, #tip { animation: none; } }
+#oTitle { font-family: var(--display); font-size: clamp(30px, 9vw, 40px); line-height: 1; }
+#oSub { display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 800; font-size: 15px; opacity: .75; margin-bottom: 4px; }
+#ad { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: rgba(29, 36, 51, .92); color: #fff; font: 800 18px var(--body); }
+
+#sheet { position: fixed; inset: 0; z-index: 5; display: flex; align-items: flex-end; justify-content: center; background: rgba(10, 12, 20, .35); }
+.panel { width: 100%; max-width: 440px; max-height: 80%; overflow: auto; background: var(--sheet); border-radius: 20px 20px 0 0;
+  padding-block: 18px calc(env(safe-area-inset-bottom, 0px) + 20px);
+  padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); }
+.panel header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.panel h2 { font: 400 22px var(--display); margin: 0; }
+.panel .x { width: 44px; height: 44px; border-radius: 50%; background: var(--chip); font-size: 18px; }
+.row { display: flex; align-items: center; gap: 12px; min-height: 56px; border-top: 1px solid color-mix(in srgb, var(--ink) 12%, transparent); }
+.row:first-of-type { border-top: 0; }
+.row .grow { flex: 1; min-width: 0; }
+.row .sub { font-weight: 600; font-size: 13px; opacity: .65; }
+.row button, .row a.btn { min-height: 40px; padding: 0 14px; border-radius: 20px; background: var(--chip); font-size: 14px; white-space: nowrap; }
+.row a.btn { display: inline-flex; align-items: center; color: var(--ink); text-decoration: none; font-weight: 800; }
+.row button.primary { background: var(--ink); color: var(--inv); }
+.swatch { width: 40px; height: 40px; border-radius: 10px; flex: none; }
+.bar { height: 6px; border-radius: 3px; margin-top: 6px; background: color-mix(in srgb, var(--ink) 12%, transparent); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--ink); }
+.note { font-size: 13px; opacity: .65; margin: 12px 0 0; }
+</style>
+
+<canvas id="c" aria-label="Game area. Tap, click or press Space to drop the block."></canvas>
+<div class="hud" aria-live="polite">
+  <div id="score">0</div>
+  <div id="best">Best 0</div>
+  <div id="flash"></div>
+</div>
+<button id="gear" class="corner" type="button" aria-label="Settings">
+  <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><g stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 5h14M3 10h14M3 15h14"/></g><g fill="currentColor"><circle cx="7" cy="5" r="2.6"/><circle cx="13" cy="10" r="2.6"/><circle cx="8" cy="15" r="2.6"/></g></svg>
+</button>
+<div id="coins" class="corner" aria-label="Coins"><span class="coin"></span><span id="coinN">0</span></div>
+<div class="msg" id="menuv">
+  <div id="title">Overhang</div>
+  <div id="hint">Tap anywhere to start</div>
+  <div class="menu-btns">
+    <div class="line">
+      <button class="btn" data-go="mode" type="button">Daily challenge</button>
+      <button class="btn gold" data-go="boost" type="button" hidden>Boost (ad)</button>
+    </div>
+    <div class="line">
+      <button class="btn" data-go="shop" type="button">Shop</button>
+      <button class="btn" data-go="missions" type="button">Missions</button>
+    </div>
+  </div>
+</div>
+<div id="tip" hidden>Tap when the block lines up with the tower</div>
+<div id="over" hidden>
+  <div class="card" role="dialog" aria-labelledby="oTitle">
+    <div id="oTitle">Game over</div>
+    <div id="oSub"></div>
+    <button id="cont" class="btn big gold" type="button">Continue · watch ad</button>
+    <button id="again" class="btn big primary" type="button">Play again</button>
+    <div class="line">
+      <button class="btn soft" data-go="double" type="button">Double coins (ad)</button>
+      <button class="btn soft" data-go="share" type="button">Share score</button>
+    </div>
+    <div class="line">
+      <button class="btn soft small" data-go="shop" type="button">Shop</button>
+      <button class="btn soft small" data-go="missions" type="button">Missions</button>
+      <button class="btn soft small" data-go="mode" type="button">Daily</button>
+    </div>
+    <button class="btn soft small" data-go="remind" type="button" hidden>Remind me about the daily challenge</button>
+  </div>
+</div>
+<div id="sheet" hidden><div class="panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title"></div></div>
+<div id="ad" hidden role="status">Ad placeholder · <span id="adcount">3</span></div>
+
+<script>
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+const Cap = window.Capacitor, native = !!Cap?.isNativePlatform?.(), plug = native ? Cap.Plugins : {};
+const C30 = Math.cos(Math.PI / 6), SIZE = 100, BH = 20, RANGE = 140, TOL = 3.5;
+let W, H, U, camY = 0, state = 'menu', stack, cur, chunks, ring, hue, combo, score, flashT;
+let mode = 'endless', run = { speed: 1, size: SIZE }, target = 0, challengeSeed = '';
+
+const get = (k, d) => { try { const v = localStorage.getItem('overhang-' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } };
+const put = (k, v) => { try { localStorage.setItem('overhang-' + k, JSON.stringify(v)); } catch (e) {} };
+let best = +get('best', 0) || 0, muted = !!get('muted', 0), haptics = get('haptics', 1) !== 0;
+
+// Events for Firebase Analytics. Does nothing until GoogleService-Info.plist / google-services.json are added (see README).
+const track = (name, params = {}) => { plug.FirebaseAnalytics?.logEvent({ name, params }).catch(() => {}); };
+const quiet = p => Promise.resolve(p).catch(() => {});
+
+// Pure overlap math: returns the kept part and the falling chunk, or null on a total miss.
+function cut(prevStart, size, curStart) {
+  const d = curStart - prevStart, keep = size - Math.abs(d);
+  if (keep <= 0) return null;
+  return d > 0 ? { start: curStart, size: keep, chunkStart: prevStart + size, chunkSize: d }
+               : { start: prevStart, size: keep, chunkStart: curStart, chunkSize: -d };
+}
+console.assert(cut(0, 100, 10).size === 90 && cut(0, 100, 10).chunkStart === 100, 'cut right');
+console.assert(cut(0, 100, -10).start === 0 && cut(0, 100, -10).chunkSize === 10, 'cut left');
+console.assert(cut(0, 100, 100) === null, 'miss');
+
+// ---- Seeds: daily challenge and challenge links share the same tower params for a given seed ----
+const day = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toLocaleDateString('en-CA'); };
+function seeded(str) {
+  let h = 2166136261;
+  for (const c of str) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return () => { h = Math.imul(h ^ (h >>> 15), 2246822507) ^ Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; };
+}
+// Date seeds (daily) vary speed and size; other seeds (endless runs) only pick the colors.
+function params(seed) {
+  const r = seeded(seed);
+  if (/^\d{4}-\d\d-\d\d$/.test(seed)) return { seed, speed: 0.85 + r() * 0.45, size: Math.round(70 + r() * 30), hue: r() * 360 };
+  return { seed, speed: 1, size: SIZE, hue: r() * 360 };
+}
+console.assert(JSON.stringify(params('2026-10-16')) === JSON.stringify(params('2026-10-16')), 'daily is deterministic');
+console.assert(params('2026-10-16').size !== params('2026-10-17').size || params('2026-10-16').hue !== params('2026-10-17').hue, 'days differ');
+console.assert(params('xk3f9a').size === SIZE && params('xk3f9a').hue === params('xk3f9a').hue, 'endless seeds keep size');
+const streak = () => { const s = get('streak', {}); return s.day === day() || s.day === day(-1) ? s.n : 0; };
+function bumpStreak() { const s = get('streak', {}); if (s.day !== day()) put('streak', { day: day(), n: s.day === day(-1) ? s.n + 1 : 1 }); }
+const dailyBest = () => { const d = get('daily', {}); return d.day === day() ? d.best : 0; };
+
+// Challenge link: #c-<seed>-<score> opens the same tower with the friend's score as the target.
+const link = location.hash.match(/^#c-([a-z0-9-]{1,24})-(\d{1,4})$/i);
+if (link) { mode = 'challenge'; challengeSeed = link[1]; target = +link[2]; }
+
+// ---- Themes: unlocked by endless best, bought with coins, or tried for a session with an ad ----
+const THEMES = [
+  { name: 'Pastel', at: 0, price: 0, step: 7, sat: 60, lit: [74, 62, 52], bg: [45, 88, 40, 70], ink: '#1d2433', inv: '#fff', chip: 'rgba(255,255,255,.55)', sheet: '#ffffff' },
+  { name: 'Neon', at: 25, price: 200, step: 11, sat: 95, lit: [62, 48, 36], bg: [45, 9, 55, 18], ink: '#f3f5ff', inv: '#14121f', chip: 'rgba(255,255,255,.14)', sheet: '#1c192c' },
+  { name: 'Candy', at: 50, price: 400, step: 23, sat: 80, lit: [80, 66, 55], bg: [70, 93, 60, 80], ink: '#2a1730', inv: '#fff', chip: 'rgba(255,255,255,.6)', sheet: '#ffffff' },
+  { name: 'Paper', at: 100, price: 800, step: 0, sat: 6, lit: [96, 82, 68], bg: [8, 97, 10, 84], ink: '#1d2433', inv: '#fff', chip: 'rgba(0,0,0,.07)', sheet: '#ffffff' },
+];
+const trials = new Set();
+let owned = get('owned', []), themeIdx = +get('theme', 0) || 0;
+const unlocked = i => best >= THEMES[i].at || owned.includes(i) || trials.has(i);
+if (!THEMES[themeIdx] || !unlocked(themeIdx)) themeIdx = 0;
+const theme = () => THEMES[themeIdx];
+
+// ---- Coins and missions ----
+let coins = +get('coins', 0) || 0, runCoins = 0, doubled = false, perfects = 0, maxCombo = 0, gameCounted = false, blocksCounted = 0;
+function addCoins(n) { coins += n; put('coins', coins); $('coinN').textContent = coins; }
+const REWARD = 50;
+const POOL = [
+  { id: 'perfects', kind: 'max', n: [3, 5, 8], text: n => `Land ${n} perfects in one run` },
+  { id: 'score', kind: 'max', n: [15, 25, 40], text: n => `Reach ${n} in one run` },
+  { id: 'combo', kind: 'max', n: [3, 4, 5], text: n => `Get a ×${n} perfect streak` },
+  { id: 'games', kind: 'sum', n: [3, 5, 8], text: n => `Play ${n} games` },
+  { id: 'blocks', kind: 'sum', n: [50, 100, 150], text: n => `Stack ${n} blocks in total` },
+  { id: 'daily', kind: 'max', n: [1], text: () => 'Play the daily challenge' },
+];
+function pickMissions(date) {
+  const r = seeded('missions' + date), pool = [...POOL], list = [];
+  while (list.length < 3) { const p = pool.splice(Math.floor(r() * pool.length), 1)[0]; list.push({ id: p.id, n: p.n[Math.floor(r() * p.n.length)], prog: 0 }); }
+  return list;
+}
+console.assert(new Set(pickMissions('2026-10-16').map(m => m.id)).size === 3, 'three different missions');
+function missions() {
+  let m = get('missions', null);
+  if (!m || m.day !== day()) { m = { day: day(), list: pickMissions(day()) }; put('missions', m); }
+  return m;
+}
+function progressMissions() {
+  const m = missions(), st = { perfects, score, combo: maxCombo, daily: mode === 'daily' ? 1 : 0, games: gameCounted ? 0 : 1, blocks: score - blocksCounted };
+  gameCounted = true; blocksCounted = score; // a continued run must not count twice
+  let done = 0;
+  for (const x of m.list) {
+    if (x.prog >= x.n) continue;
+    const p = POOL.find(p => p.id === x.id);
+    x.prog = Math.min(x.n, p.kind === 'sum' ? x.prog + st[x.id] : Math.max(x.prog, st[x.id]));
+    if (x.prog >= x.n) done++;
+  }
+  put('missions', m);
+  if (done) { addCoins(REWARD * done); flash(`Mission complete +${REWARD * done}`); cg?.game.happytime(); track('mission_complete', { count: done }); }
+}
+
+function resize() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  U = Math.min(W, H * 0.75) / 380;
+}
+addEventListener('resize', resize); resize();
+
+function reset() {
+  run = params(mode === 'daily' ? day() : mode === 'challenge' ? challengeSeed : 'x' + Math.random().toString(36).slice(2, 8));
+  run.slow = run.saves = 0;
+  hue = run.hue; combo = 0; continued = false; score = 0; chunks = []; ring = null;
+  runCoins = 0; doubled = false; perfects = 0; maxCombo = 0; gameCounted = false; blocksCounted = 0;
+  stack = [{ x: -run.size / 2, z: -run.size / 2, w: run.size, d: run.size, y: -900, h: 900, hue }];
+  spawn();
+  $('score').textContent = '0';
+}
+function spawn() {
+  const p = stack[stack.length - 1], axis = stack.length % 2 ? 'x' : 'z';
+  cur = { ...p, y: p.y + p.h, h: BH, hue: hue + stack.length * theme().step, axis, off: -RANGE, dir: 1 };
+  cur[axis] = p[axis] - RANGE;
+}
+
+let ac;
+function tone(semi, len = 0.28, type = 'triangle') {
+  if (muted) return;
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.type = type; o.frequency.value = 220 * Math.pow(2, semi / 12);
+    g.gain.setValueAtTime(0.16, t); g.gain.exponentialRampToValueAtTime(0.001, t + len);
+    o.connect(g).connect(ac.destination); o.start(t); o.stop(t + len);
+  } catch (e) {}
+}
+// Native haptics on phones (navigator.vibrate does nothing on iPhone); vibrate on Android browsers.
+function buzz(kind) {
+  if (!haptics) return;
+  try {
+    if (plug.Haptics) quiet(kind === 'over' ? plug.Haptics.notification({ type: 'ERROR' }) : plug.Haptics.impact({ style: kind === 'perfect' ? 'MEDIUM' : 'LIGHT' }));
+    else navigator.vibrate?.(kind === 'over' ? [30, 40, 60] : kind === 'perfect' ? 15 : 8);
+  } catch (e) {}
+}
+const SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26, 28, 31];
+
+function flash(text) { const f = $('flash'); f.textContent = text; f.classList.add('on'); flashT = 1.1; }
+
+let tutorial = false;
+function drop() {
+  const p = stack[stack.length - 1], k = cur.axis, s = k === 'x' ? 'w' : 'd', d = Math.abs(cur[k] - p[k]);
+  const save = run.saves > 0 && d > TOL && d < cur[s]; // boost: an off-center drop counts as perfect
+  if (d <= TOL || save) {
+    if (save) run.saves--;
+    cur[k] = p[k]; combo++; perfects++; maxCombo = Math.max(maxCombo, combo);
+    if (combo >= 3 && cur[s] < run.size) { const g = Math.min(6, run.size - cur[s]); cur[k] -= g / 2; cur[s] += g; }
+    ring = { b: { ...cur }, t: 0 };
+    tone(12 + SCALE[Math.min(combo - 1, SCALE.length - 1)]); buzz('perfect');
+    flash(save ? 'Saved!' : combo > 1 ? 'Perfect ×' + combo : 'Perfect');
+    runCoins += 2; addCoins(2);
+  } else {
+    const r = cut(p[k], cur[s], cur[k]);
+    if (!r) { chunks.push({ ...cur, vy: 0 }); return over(); }
+    chunks.push({ ...cur, [k]: r.chunkStart, [s]: r.chunkSize, vy: 0 });
+    cur[k] = r.start; cur[s] = r.size; combo = 0;
+    tone(5, 0.15, 'sine'); buzz('tap');
+    runCoins += 1; addCoins(1);
+  }
+  delete cur.axis; stack.push(cur);
+  score++; $('score').textContent = score;
+  if (tutorial && score >= 3) { tutorial = false; put('tut', 1); $('tip').hidden = true; }
+  spawn();
+}
+
+function over() {
+  state = 'over'; cur = null; tone(-5, 0.6, 'sawtooth'); buzz('over');
+  $('tip').hidden = true; // tutorial shows again next run until 3 blocks are placed
+  cg?.game.gameplayStop();
+  const was = THEMES.map((t, i) => unlocked(i));
+  let title = 'Game over';
+  if (mode === 'daily') { if (score > dailyBest()) { put('daily', { day: day(), best: score }); title = 'New best!'; } }
+  else if (mode === 'challenge') title = score > target ? 'You won!' : score === target ? 'Tied!' : 'So close';
+  else if (score > best) { best = score; put('best', best); title = 'New best!'; }
+  if (title === 'New best!' || title === 'You won!') cg?.game.happytime();
+  const fresh = THEMES.find((t, i) => !was[i] && unlocked(i));
+  if (fresh) flash(fresh.name + ' theme unlocked');
+  progressMissions();
+  put('games', get('games', 0) + 1);
+  track('game_over', { score, mode, continued });
+  $('oTitle').textContent = title;
+  $('cont').hidden = continued || !adsOn();
+  if (!$('cont').hidden) track('continue_offered', { score });
+  view('over');
+}
+
+// Which overlay shows: the start menu, the game-over card, or nothing while playing.
+function view(name) {
+  $('menuv').hidden = name !== 'menu';
+  $('over').hidden = name !== 'over';
+  hud();
+}
+const each = (go, fn) => document.querySelectorAll(`[data-go="${go}"]`).forEach(fn);
+
+function hud() {
+  const t = theme(), r = document.documentElement.style;
+  for (const k of ['ink', 'inv', 'chip', 'sheet']) r.setProperty('--' + k, t[k]);
+  $('best').textContent = mode === 'daily' ? `Today's best ${dailyBest()} · streak ${streak()}` : mode === 'challenge' ? `Target ${target}` : 'Best ' + best;
+  $('coinN').textContent = coins;
+  const short = b => !!b.closest('.card'), endless = mode === 'endless';
+  each('mode', b => b.textContent = short(b) ? (endless ? 'Daily' : 'Endless') : (endless ? 'Daily challenge' : 'Endless mode'));
+  const m = missions().list, left = m.filter(x => x.prog < x.n).length;
+  each('missions', b => b.textContent = left ? `Missions ${m.length - left}/${m.length}` : 'Missions done');
+  each('boost', b => { b.hidden = !adsOn(); b.textContent = boost ? 'Boost ready' : 'Boost (ad)'; b.disabled = boost; });
+  each('double', b => { b.hidden = !runCoins || doubled || !adsOn(); b.textContent = 'Double coins (ad)'; });
+  each('share', b => b.hidden = score === 0);
+  each('remind', b => b.hidden = !plug.LocalNotifications || get('remindAsked', 0) || get('games', 0) < 2);
+  const earned = doubled ? runCoins * 2 : runCoins;
+  $('oSub').innerHTML = `<span class="coin"></span>+${earned} coin${earned === 1 ? '' : 's'} this run`;
+}
+
+let boost = false;
+async function act() {
+  if (state === 'play') return drop();
+  if (state === 'busy' || !$('sheet').hidden) return;
+  if (state === 'over') return toMenu();
+  view('none');
+  if (mode === 'daily') { bumpStreak(); scheduleReminders(); }
+  reset(); state = 'play'; camY = 0;
+  if (boost) { run.slow = 10; run.saves = 3; boost = false; flash('Boost on'); }
+  if (!get('tut', 0)) { tutorial = true; $('tip').hidden = false; }
+  cg?.game.gameplayStart();
+  track('game_start', { mode, theme: theme().name, streak: streak() });
+}
+
+async function cont() {
+  if (state !== 'over') return;
+  state = 'busy'; $('cont').hidden = true; hud();
+  if (await showRewarded()) {
+    continued = true; combo = 0; spawn(); state = 'play'; view('none');
+    cg?.game.gameplayStart();
+    track('continue_used', { score });
+  } else {
+    state = 'over'; hud(); $('oSub').textContent = 'No ad available right now';
+  }
+}
+
+// Runs an opt-in rewarded ad from a menu button and restores the screen state afterwards.
+async function rewarded(onReward) {
+  if (state === 'busy') return;
+  const prev = state; state = 'busy'; hud();
+  const ok = await showRewarded();
+  state = prev;
+  if (ok) onReward(); else flash('No ad right now');
+  hud();
+}
+const getBoost = () => rewarded(() => { boost = true; flash('Boost: slow start + 3 saves'); track('boost'); });
+const doubleCoins = () => rewarded(() => { addCoins(runCoins); doubled = true; flash(`+${runCoins} coins`); track('double_coins', { coins: runCoins }); });
+
+function toggleMode() {
+  if (state === 'busy') return;
+  mode = mode === 'endless' ? 'daily' : 'endless';
+  showMenu();
+}
+// Play again goes back to the start screen; the interstitial plays on the way out of a finished run.
+async function toMenu() {
+  if (++runs % INTER_EVERY === 0 && !noAds) { state = 'busy'; view('none'); await showInterstitial(); }
+  showMenu();
+}
+function showMenu() {
+  state = 'menu'; reset(); camY = 0;
+  $('title').textContent = mode === 'daily' ? 'Daily challenge' : mode === 'challenge' ? `Beat ${target}` : 'Overhang';
+  $('hint').textContent = mode === 'daily' ? 'Same tower for everyone today. Tap anywhere to start'
+    : mode === 'challenge' ? 'A friend challenged you on this tower. Tap anywhere to start' : 'Tap anywhere to start';
+  view('menu');
+}
+
+// ---- Panels: shop, missions, settings ----
+let panel = '', opener = null;
+function open(name) {
+  if (state === 'busy' || state === 'play') return;
+  if (!panel) opener = document.activeElement;
+  panel = name; $('sheet').hidden = false; render();
+  $('sheet').querySelector('.x').focus();
+}
+function close() { panel = ''; $('sheet').hidden = true; opener?.focus?.(); }
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function render() {
+  const head = t => `<header><h2 id="sheet-title">${t}</h2><button class="x" type="button" data-a="close" aria-label="Close">✕</button></header>`;
+  let html = '';
+  if (panel === 'shop') {
+    html = head('Shop') + `<p class="note" style="margin:0 0 6px">You have ${coins} coins. Earn 1 per block and 2 per perfect.</p>` + THEMES.map((t, i) => {
+      const sw = `<span class="swatch" style="background:linear-gradient(135deg,hsl(200,${t.sat}%,${t.lit[0]}%),hsl(${200 + t.step * 6},${t.sat}%,${t.lit[2]}%))"></span>`;
+      let act;
+      if (i === themeIdx) act = '<button type="button" disabled>In use</button>';
+      else if (unlocked(i)) act = `<button type="button" class="primary" data-a="use" data-i="${i}">Use</button>`;
+      else act = `<button type="button" class="primary" data-a="buy" data-i="${i}" ${coins < t.price ? 'disabled' : ''}>${t.price} coins</button>` +
+        (adsOn() ? `<button type="button" data-a="try" data-i="${i}">Try (ad)</button>` : '');
+      const sub = unlocked(i) ? (trials.has(i) && !owned.includes(i) && best < t.at ? 'On trial this session' : 'Unlocked') : `Or reach ${t.at} in endless`;
+      return `<div class="row">${sw}<div class="grow">${t.name}<div class="sub">${sub}</div></div>${act}</div>`;
+    }).join('');
+  } else if (panel === 'missions') {
+    html = head('Missions') + missions().list.map(x => {
+      const p = POOL.find(p => p.id === x.id), done = x.prog >= x.n;
+      return `<div class="row"><div class="grow">${esc(p.text(x.n))}<div class="bar"><i style="width:${(x.prog / x.n) * 100}%"></i></div></div><div class="sub">${done ? 'Done' : `${x.prog}/${x.n}`} · +${REWARD}</div></div>`;
+    }).join('') + '<p class="note">New missions every day.</p>';
+  } else if (panel === 'settings') {
+    const onoff = (a, v, label) => `<div class="row"><div class="grow">${label}</div><button type="button" data-a="${a}" aria-pressed="${v}">${v ? 'On' : 'Off'}</button></div>`;
+    html = head('Settings') + onoff('sound', !muted, 'Sound') + onoff('haptics', haptics, 'Vibration');
+    if (plug.LocalNotifications) html += onoff('reminders', !!get('remind', 0), 'Daily reminder at 6 pm');
+    if (IAP) html += noAds ? '<div class="row"><div class="grow">Ads removed<div class="sub">Thank you for supporting Overhang</div></div></div>'
+      : `<div class="row"><div class="grow">Remove ads<div class="sub">No more ads between games. Optional ads stay.</div></div><button type="button" class="primary" data-a="noads">${esc(price || 'Buy')}</button></div>`;
+    if (IAP) html += '<div class="row"><div class="grow">Restore purchase</div><button type="button" data-a="restore">Restore</button></div>';
+    if (privacyRequired) html += '<div class="row"><div class="grow">Ad privacy choices</div><button type="button" data-a="privacy">Change</button></div>';
+    html += '<div class="row"><div class="grow">Privacy policy</div><a class="btn" href="privacy.html">Read</a></div>';
+  }
+  $('sheet').firstElementChild.innerHTML = html;
+}
+$('sheet').addEventListener('click', async e => {
+  if (e.target === $('sheet')) return close();
+  const b = e.target.closest('[data-a]'); if (!b) return;
+  const i = +b.dataset.i;
+  switch (b.dataset.a) {
+    case 'close': return close();
+    case 'use': themeIdx = i; put('theme', i); break;
+    case 'buy': if (coins >= THEMES[i].price) { addCoins(-THEMES[i].price); owned.push(i); put('owned', owned); themeIdx = i; put('theme', i); track('theme_buy', { theme: THEMES[i].name }); } break;
+    case 'try': close(); return rewarded(() => { trials.add(i); themeIdx = i; track('theme_trial', { theme: THEMES[i].name }); });
+    case 'sound': toggleMute(); break;
+    case 'haptics': haptics = !haptics; put('haptics', haptics ? 1 : 0); buzz('perfect'); break;
+    case 'reminders': await setReminders(!get('remind', 0)); break;
+    case 'noads': await buyNoAds(); break;
+    case 'restore': await restore(); break;
+    case 'privacy': quiet(AdMob?.showPrivacyOptionsForm()); break;
+  }
+  hud(); if (panel) render();
+});
+
+// ---- Daily reminders (local notifications, no server) ----
+const LN = plug.LocalNotifications;
+async function setReminders(on) {
+  put('remindAsked', 1);
+  if (on) {
+    const p = await LN.requestPermissions().catch(() => ({}));
+    if (p.display !== 'granted') { flash('Allow notifications in Settings'); return; }
+  }
+  put('remind', on ? 1 : 0); await scheduleReminders();
+  flash(on ? 'Reminder set for 6 pm' : 'Reminder off'); track('reminders', { on });
+}
+async function scheduleReminders() {
+  if (!LN) return;
+  try {
+    await LN.cancel({ notifications: [1, 2, 3, 4, 5, 6, 7].map(id => ({ id })) });
+    if (!get('remind', 0)) return;
+    const s = streak(), playedToday = get('streak', {}).day === day(), list = [];
+    for (let k = playedToday ? 1 : 0; list.length < 7; k++) {
+      const at = new Date(); at.setDate(at.getDate() + k); at.setHours(18, 0, 0, 0);
+      if (at <= new Date()) continue;
+      const body = list.length === 0 && s > 0 ? `Keep your ${s}-day streak going. Today's tower is ready.` : "Today's daily tower is ready.";
+      list.push({ id: list.length + 1, title: 'Overhang', body, schedule: { at } });
+    }
+    await LN.schedule({ notifications: list });
+  } catch (e) {}
+}
+
+// ---- Share card and challenge link ----
+const SHARE_URL = 'https://teodordonchev.github.io/overhang/'; // hosted web game; challenge links open there
+function card() {
+  const c = document.createElement('canvas'), g = c.getContext('2d'), t = theme(), side = Math.min(cv.width, cv.height);
+  c.width = c.height = 1080;
+  g.drawImage(cv, (cv.width - side) / 2, (cv.height - side) / 2, side, side, 0, 0, 1080, 1080);
+  g.fillStyle = t.ink; g.textAlign = 'center';
+  g.font = '220px Bungee, "Arial Black", sans-serif'; g.fillText(score, 540, 260);
+  g.font = '800 48px Nunito, system-ui, sans-serif';
+  g.fillText(mode === 'daily' ? `OVERHANG DAILY · ${day()}` : 'OVERHANG', 540, 340);
+  g.fillText('Can you beat it?', 540, 1020);
+  return c;
+}
+async function share() {
+  const url = SHARE_URL ? `${SHARE_URL}#c-${run.seed}-${score}` : '';
+  const text = `I stacked ${score} in Overhang${mode === 'daily' ? "'s daily challenge" : ''}. Can you beat it?` + (url ? ' ' + url : '');
+  track('share', { score, mode });
+  if (!native && !navigator.canShare) return copy(text); // clipboard must be called before any await
+  try {
+    const c = card();
+    if (native) {
+      const { uri } = await plug.Filesystem.writeFile({ path: 'overhang-score.png', data: c.toDataURL('image/png').split(',')[1], directory: 'CACHE' });
+      return await plug.Share.share({ text, files: [uri] });
+    }
+    const file = new File([await new Promise(r => c.toBlob(r, 'image/png'))], 'overhang-score.png', { type: 'image/png' });
+    await navigator.share(navigator.canShare({ files: [file] }) ? { files: [file], text } : { text });
+  } catch (e) {
+    if (!/abort|cancel/i.test(e?.name + e?.message)) flash('Could not share');
+  }
+}
+function copy(text) { navigator.clipboard?.writeText(text).then(() => flash('Copied to clipboard'), () => flash(text)); }
+
+// ---- Remove ads (non-consumable in-app purchase) ----
+// Create a non-consumable product with this ID in App Store Connect and Google Play Console.
+const NOADS_ID = 'overhang_remove_ads';
+const IAP = plug.NativePurchases || null;
+let noAds = !!get('noads', 0), price = '';
+const setNoAds = v => { noAds = v; put('noads', v ? 1 : 0); hud(); };
+async function refreshPurchases() {
+  if (!IAP) return;
+  try {
+    const { products } = await IAP.getProducts({ productIdentifiers: [NOADS_ID], productType: 'inapp' });
+    price = products[0]?.priceString || '';
+    const { purchases } = await IAP.getPurchases({ productType: 'inapp' });
+    // Refunded purchases drop out of this list, so this also revokes. On Android only state "1" means purchased.
+    setNoAds(purchases.some(p => p.productIdentifier === NOADS_ID && (p.purchaseState == null || p.purchaseState === '1')));
+  } catch (e) { hud(); } // offline: keep the cached value
+}
+async function buyNoAds() {
+  try {
+    await IAP.purchaseProduct({ productIdentifier: NOADS_ID, productType: 'inapp' });
+    setNoAds(true); flash('Ads removed. Thank you!'); track('purchase_noads');
+  } catch (e) { if (!/cancel/i.test(e?.message)) flash('Purchase failed'); }
+}
+async function restore() {
+  try { await IAP.restorePurchases(); } catch (e) {}
+  await refreshPurchases();
+  flash(noAds ? 'Purchase restored' : 'Nothing to restore');
+}
+
+// ---- Ads: AdMob in the apps, the CrazyGames SDK on crazygames.com, a placeholder elsewhere on the web ----
+// iOS uses the real Overhang ad units; Android still has Google's test IDs until its AdMob app exists.
+// testing: true serves Google test ads even with real IDs, so development taps can't flag the account.
+// Set it to false only for the App Store build (README → Before release).
+const AD = {
+  android: { reward: 'ca-app-pub-3940256099942544/5224354917', inter: 'ca-app-pub-3940256099942544/1033173712' },
+  ios: { reward: 'ca-app-pub-2103297043095407/6360620055', inter: 'ca-app-pub-2103297043095407/3272431443' },
+  testing: true,
+};
+const INTER_EVERY = 3; // interstitial before every 3rd restart; skipped for players who bought Remove ads
+let runs = 0, continued = false, adsReady = false, privacyRequired = false, rewardP = null, interP = null, cg = null;
+const AdMob = plug.AdMob || null;
+const ids = AdMob && AD[Cap.getPlatform()];
+const adsOn = () => cg ? true : AdMob ? adsReady : true; // plain web uses the placeholder ad below
+
+async function initAds() {
+  if (!AdMob) return;
+  try {
+    await AdMob.initialize({ initializeForTesting: AD.testing });
+    const c = await AdMob.requestConsentInfo(); // GDPR / UMP consent, required for EU players
+    const after = c.isConsentFormAvailable && c.status === 'REQUIRED' ? await AdMob.showConsentForm() : c;
+    adsReady = after.canRequestAds !== false;
+    privacyRequired = after.privacyOptionsRequirementStatus === 'REQUIRED';
+    preload(); hud();
+  } catch (e) { console.warn('ads init failed', e); }
+}
+// CrazyGames: load their SDK only when the game runs on their site (or their local sandbox).
+if (!native && /crazygames/i.test(location.hostname + location.search)) {
+  const s = document.createElement('script');
+  s.src = 'https://sdk.crazygames.com/crazygames-sdk-v3.js';
+  s.onload = async () => { try { await window.CrazyGames.SDK.init(); cg = window.CrazyGames.SDK; hud(); } catch (e) { console.warn('CrazyGames SDK init failed', e); } };
+  document.head.append(s);
+}
+const cgAd = type => new Promise(done => cg.ad.requestAd(type, {
+  adStarted: () => { if (ac) quiet(ac.suspend()); },
+  adFinished: () => { if (ac) quiet(ac.resume()); done(true); },
+  adError: () => { if (ac) quiet(ac.resume()); done(false); },
+}));
+const load = (fn, adId) => fn({ adId, isTesting: AD.testing }).then(() => true, () => false);
+function preload() {
+  if (!adsReady) return;
+  rewardP ??= load(o => AdMob.prepareRewardVideoAd(o), ids.reward);
+  if (!noAds) interP ??= load(o => AdMob.prepareInterstitial(o), ids.inter);
+}
+// Resolves when the ad closes. For rewarded ads, show() only resolves once the reward is earned.
+async function showFull(show, prefix) {
+  let earned = false; const subs = [];
+  await new Promise(async done => {
+    for (const ev of ['Dismissed', 'FailedToShow']) subs.push(await AdMob.addListener(prefix + ev, done));
+    show().then(() => earned = true, done);
+  });
+  subs.forEach(s => s.remove());
+  return earned;
+}
+async function showRewarded() {
+  if (cg) return cgAd('rewarded');
+  if (!AdMob) return placeholderAd();
+  const ok = rewardP && await rewardP; rewardP = null;
+  const earned = ok ? await showFull(() => AdMob.showRewardVideoAd(), 'onRewardedVideoAd') : false;
+  preload(); return earned;
+}
+async function showInterstitial() {
+  if (cg) return cgAd('midgame');
+  if (!AdMob) return; // shortcut: no interstitials on the plain web until a web ad network (e.g. AdSense H5 Games Ads) is approved
+  const ok = interP && await interP; interP = null;
+  if (ok) { track('interstitial_shown'); await showFull(() => AdMob.showInterstitial(), 'interstitialAd'); }
+  preload();
+}
+// shortcut: the plain web shows a 3-second placeholder instead of a real ad; wire AdSense H5 Games Ads here once approved.
+function placeholderAd() {
+  return new Promise(done => {
+    let n = 3; $('adcount').textContent = n; $('ad').hidden = false;
+    const t = setInterval(() => { if (--n > 0) return $('adcount').textContent = n; clearInterval(t); $('ad').hidden = true; done(true); }, 1000);
+  });
+}
+
+cv.addEventListener('pointerdown', e => { e.preventDefault(); act(); }); // the game-over card covers the canvas, so only its buttons act there
+addEventListener('keydown', e => {
+  if (e.key === 'Escape' && panel) return close();
+  if (e.code === 'Space' || e.code === 'Enter') { if (e.target.tagName === 'BUTTON' || e.target.tagName === 'A') return; e.preventDefault(); if (!e.repeat) act(); }
+  if (e.key === 'm' && !panel) toggleMute();
+});
+function toggleMute() { muted = !muted; put('muted', muted ? 1 : 0); }
+const on = (id, fn) => $(id).addEventListener('click', fn);
+on('cont', cont); on('again', act); on('gear', () => open('settings'));
+const GO = { mode: toggleMode, share, boost: getBoost, double: doubleCoins, shop: () => open('shop'), missions: () => open('missions'), remind: () => setReminders(true).then(hud) };
+document.addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) GO[b.dataset.go](); });
+if (mode === 'challenge') showMenu();
+initAds(); refreshPurchases(); scheduleReminders(); hud();
+quiet(plug.SplashScreen?.hide());
+
+function poly(pts, fill) { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const q of pts.slice(1)) ctx.lineTo(q[0], q[1]); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); }
+function prism(b, cx, cy) {
+  const P = (X, Z, Y) => [cx + (X - Z) * C30 * U, cy + ((X + Z) * 0.5 - Y) * U];
+  const { x, z, w, d, y, h } = b, t = y + h, hh = b.hue % 360, th = theme();
+  const top = [P(x, z, t), P(x + w, z, t), P(x + w, z + d, t), P(x, z + d, t)];
+  poly([top[1], top[2], P(x + w, z + d, y), P(x + w, z, y)], `hsl(${hh},${th.sat - 5}%,${th.lit[2]}%)`);
+  poly([top[3], top[2], P(x + w, z + d, y), P(x, z + d, y)], `hsl(${hh},${th.sat - 5}%,${th.lit[1]}%)`);
+  poly(top, `hsl(${hh},${th.sat}%,${th.lit[0]}%)`);
+}
+// Dashed outline at the height of the score to beat, so players see a new best coming.
+function bestLine(cx, cy) {
+  const mark = mode === 'daily' ? dailyBest() : mode === 'challenge' ? target : best;
+  if (!mark || score >= mark && state === 'play') return;
+  const y = mark * BH, s = SIZE / 2 + 8, P = (X, Z) => [cx + (X - Z) * C30 * U, cy + ((X + Z) * 0.5 - y) * U];
+  const pts = [P(-s, -s), P(s, -s), P(s, s), P(-s, s)];
+  if (pts[2][1] < 0 || pts[0][1] > H) return;
+  ctx.save();
+  ctx.globalAlpha = 0.55; ctx.strokeStyle = ctx.fillStyle = theme().ink; ctx.lineWidth = 2; ctx.setLineDash([6, 6]);
+  ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(...q) : ctx.moveTo(...q)); ctx.closePath(); ctx.stroke();
+  ctx.font = '800 12px Nunito, system-ui, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText(mode === 'challenge' ? 'TARGET ' + mark : 'BEST ' + mark, pts[1][0] + 8, pts[1][1] + 4);
+  ctx.restore();
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.05); last = now;
+  if (!stack) reset();
+  const topY = stack.length * BH - BH;
+  camY += ((state === 'over' ? topY * 0.5 : topY) - camY) * Math.min(1, dt * 4);
+  if (cur && state === 'play') {
+    // Gentle start: the first 5 blocks are slow so new players land a few before it speeds up. Boost slows the first 10.
+    const speed = Math.min(score < 5 ? 80 + score * 8 : 120 + score * 3, 300) * run.speed * (score < run.slow ? 0.6 : 1);
+    cur.off += cur.dir * speed * dt;
+    if (cur.off > RANGE) { cur.off = RANGE; cur.dir = -1; }
+    if (cur.off < -RANGE) { cur.off = -RANGE; cur.dir = 1; }
+    cur[cur.axis] = stack[stack.length - 1][cur.axis] + cur.off;
+  }
+  for (const c of chunks) { c.vy += 900 * dt; c.y -= c.vy * dt; }
+  chunks = chunks.filter(c => c.y > camY - 1200);
+  if (flashT > 0 && (flashT -= dt) <= 0) $('flash').classList.remove('on');
+
+  const h0 = (stack[stack.length - 1].hue) % 360, bg = theme().bg;
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, `hsl(${h0},${bg[0]}%,${bg[1]}%)`); g.addColorStop(1, `hsl(${(h0 + 40) % 360},${bg[2]}%,${bg[3]}%)`);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  const cx = W / 2, cy = H * 0.58 + camY * U;
+  for (const b of stack) if ((b.y + b.h - camY) * U > -H) prism(b, cx, cy);
+  bestLine(cx, cy);
+  for (const c of chunks) prism(c, cx, cy);
+  if (cur) prism(cur, cx, cy);
+  if (ring && (ring.t += dt) < 0.5) {
+    const { x, z, w, d, y, h } = ring.b, e = ring.t * 24, t = y + h;
+    const P = (X, Z) => [cx + (X - Z) * C30 * U, cy + ((X + Z) * 0.5 - t) * U];
+    const pts = [P(x - e, z - e), P(x + w + e, z - e), P(x + w + e, z + d + e), P(x - e, z + d + e)];
+    ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(...q) : ctx.moveTo(...q)); ctx.closePath();
+    ctx.strokeStyle = `rgba(255,255,255,${1 - ring.t * 2})`; ctx.lineWidth = 3; ctx.stroke();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
