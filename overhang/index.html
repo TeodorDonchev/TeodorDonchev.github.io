@@ -315,7 +315,7 @@ function over() {
   if (mode === 'daily') { if (score > dailyBest()) { put('daily', { day: day(), best: score }); title = 'New best!'; } }
   else if (mode === 'challenge') title = score > target ? 'You won!' : score === target ? 'Tied!' : 'So close';
   else if (score > best) { best = score; put('best', best); title = 'New best!'; }
-  if (title === 'New best!' || title === 'You won!') cg?.game.happytime();
+  if (title === 'New best!' || title === 'You won!') { cg?.game.happytime(); askForReview(); }
   const fresh = THEMES.find((t, i) => !was[i] && unlocked(i));
   if (fresh) flash(fresh.name + ' theme unlocked');
   progressMissions();
@@ -445,6 +445,7 @@ function render() {
       : `<div class="row"><div class="grow">Remove ads<div class="sub">No more ads between games. Optional ads stay.</div></div><button type="button" class="primary" data-a="noads">${esc(price || 'Buy')}</button></div>`;
     if (IAP) html += '<div class="row"><div class="grow">Restore purchase</div><button type="button" data-a="restore">Restore</button></div>';
     if (privacyRequired) html += '<div class="row"><div class="grow">Ad privacy choices</div><button type="button" data-a="privacy">Change</button></div>';
+    html += '<div class="row"><div class="grow">Send feedback<div class="sub">Ideas, bugs or anything that bugs you</div></div><a class="btn" href="mailto:teodorgdo@gmail.com?subject=Overhang%20feedback">Email</a></div>';
     html += '<div class="row"><div class="grow">Privacy policy</div><a class="btn" href="privacy.html">Read</a></div>';
   }
   $('sheet').firstElementChild.innerHTML = html;
@@ -467,6 +468,19 @@ $('sheet').addEventListener('click', async e => {
   }
   hud(); if (panel) render();
 });
+
+// ---- App Store rating ----
+// Asked only at a happy moment (a new best or a won challenge) for players who have played a while.
+// Apple's own prompt: it decides whether to show (at most 3 times a year), and every player gets the
+// same prompt, never filtered by mood (App Review 5.6.1, Google Play's ban on review gating).
+function askForReview() {
+  if (!plug.InAppReview || score < 10 || get('games', 0) < 5) return;
+  const last = get('reviewAt', 0);
+  if (Date.now() - last < 90 * 864e5) return; // our own spacing on top of Apple's limit
+  put('reviewAt', Date.now());
+  setTimeout(() => quiet(plug.InAppReview.requestReview()), 1200); // let the "New best!" card land first
+  track('review_prompt', { score });
+}
 
 // ---- Daily reminders (local notifications, no server) ----
 const LN = plug.LocalNotifications;
